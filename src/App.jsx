@@ -50,7 +50,7 @@ import RankingModal from './components/RankingModal';
 import ReviewModal from './components/ReviewModal';
 import DeckOptionsModal from './components/DeckOptionsModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import { UserProvider, useUser } from './contexts/UserContext';
+import { UserProvider, useUser } from './context/UserContext';
 
 // --- Firebase Imports ---
 import { 
@@ -67,7 +67,7 @@ import {
   collection, 
   onSnapshot 
 } from 'firebase/firestore';
-import { auth, db, appId } from './firebase';
+import { auth, db, appId } from './services/firebase';
 
 // --- SRS Constants ---
 const SRS_INTERVALS = [1, 3, 7, 15, 30]; // Dias para próximas revisões
