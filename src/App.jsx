@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Flame, 
-  Trophy, 
-  Clock, 
-  PlusSquare, 
-  FileText, 
-  ChevronRight, 
+import {
+  Flame,
+  Trophy,
+  Clock,
+  PlusSquare,
+  FileText,
+  ChevronRight,
   ChevronLeft,
-  CheckCircle2, 
+  CheckCircle2,
   AlertCircle,
-  Brain, 
+  Brain,
   Zap,
   Save,
   History,
@@ -53,19 +53,21 @@ import ConfirmationModal from './components/ConfirmationModal';
 import { UserProvider, useUser } from './context/UserContext';
 
 // --- Firebase Imports ---
-import { 
-  signInWithCustomToken, 
-  signInAnonymously, 
+import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
   onAuthStateChanged,
-  signOut
+  signOut,
+  signInWithPopup
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
+import {
+  getFirestore,
+  doc,
+  setDoc,
   getDoc,
-  collection, 
-  onSnapshot 
+  collection,
+  onSnapshot
 } from 'firebase/firestore';
 import { auth, db, appId } from './services/firebase';
 
@@ -102,7 +104,7 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
 
   return (
     <div className="group w-full flex flex-col gap-2 p-3 text-sm rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer">
-      <div 
+      <div
         onClick={() => onOpenOptions(deck)}
         className="flex items-center justify-between border-b border-slate-100 pb-2 mb-1 hover:bg-slate-50 -mx-3 px-3 pt-1 rounded-t-xl transition-colors"
         title="Clique para opções do deck"
@@ -112,7 +114,7 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
           {deck.title}
         </div>
         <div className="flex items-center gap-2">
-           <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+          <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
             {hasCards ? currentIndex + 1 : 0}/{cards.length}
           </div>
           <Settings2 size={12} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -120,8 +122,8 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
       </div>
 
       {hasCards ? (
-        <div 
-          onClick={(e) => { e.stopPropagation(); setIsFlipped(!isFlipped); }} 
+        <div
+          onClick={(e) => { e.stopPropagation(); setIsFlipped(!isFlipped); }}
           className="relative min-h-[80px] flex items-center justify-center text-center p-2 bg-slate-50 rounded-lg border border-slate-100 group-hover:bg-indigo-50/30 transition-colors"
         >
           <div className="text-xs text-slate-700 font-medium leading-relaxed px-4 select-none">
@@ -131,7 +133,7 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
               <span className="animate-in fade-in duration-300">{currentCard.front}</span>
             )}
           </div>
-          
+
           <div className="absolute top-1 right-1 text-[8px] uppercase font-bold text-slate-300">
             {isFlipped ? 'Verso' : 'Frente'}
           </div>
@@ -144,14 +146,14 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
 
       {cards.length > 1 && (
         <div className="flex items-center justify-between px-1 pt-1">
-          <button 
+          <button
             onClick={prevCard}
             className="p-1 hover:bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-md transition-colors"
           >
             <ChevronLeft size={14} />
           </button>
           <span className="text-[10px] text-slate-300 font-medium select-none">Navegar</span>
-          <button 
+          <button
             onClick={nextCard}
             className="p-1 hover:bg-slate-100 text-slate-400 hover:text-indigo-600 rounded-md transition-colors"
           >
@@ -165,37 +167,39 @@ const FlashcardDeck = ({ deck, onOpenOptions }) => {
 
 const AppContent = () => {
   // --- State Management ---
-  const { 
+  const {
     user, authLoading, username, userProfile, xp, level, streak, showLevelUp,
     addXp, incrementStreak, setUsername, setUserProfile
   } = useUser();
 
   const [isInApp, setIsInApp] = useState(false); // Controls Login Screen vs App
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authError, setAuthError] = useState(null);
+
   const [editorMode, setEditorMode] = useState('blank');
-  const [totalPomodoros, setTotalPomodoros] = useState(0); 
-  
+  const [totalPomodoros, setTotalPomodoros] = useState(0);
+
   // UI State
   const [showPasteWarning, setShowPasteWarning] = useState(false);
-  const [lastSaved, setLastSaved] = useState(""); 
+  const [lastSaved, setLastSaved] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
-  const [showProfile, setShowProfile] = useState(false); 
+  const [showProfile, setShowProfile] = useState(false);
 
   // Session State
   const [sessionSeconds, setSessionSeconds] = useState(0);
 
   // Confirmation Modal State
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null); 
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   // Flashcard & Deck State
   const [showFlashcardModal, setShowFlashcardModal] = useState(false);
   const [showRanking, setShowRanking] = useState(false);
   const [selectedDeck, setSelectedDeck] = useState(null);
   const [isReviewing, setIsReviewing] = useState(false);
-  
+
   const [deckToEdit, setDeckToEdit] = useState(null);
 
   // Data State
@@ -205,20 +209,20 @@ const AppContent = () => {
       title: 'Neurociência da Aprendizagem',
       createdAt: new Date().toLocaleDateString('pt-BR'),
       cards: [
-        { 
-          id: 101, 
-          front: 'O que é Recuperação Ativa (Active Recall)?', 
-          back: 'É o esforço consciente de resgatar uma informação da memória sem consultar o material original. É a forma mais eficiente de fortalecer conexões neurais.' 
+        {
+          id: 101,
+          front: 'O que é Recuperação Ativa (Active Recall)?',
+          back: 'É o esforço consciente de resgatar uma informação da memória sem consultar o material original. É a forma mais eficiente de fortalecer conexões neurais.'
         },
-        { 
-          id: 102, 
-          front: 'O que combate a Curva do Esquecimento de Ebbinghaus?', 
-          back: 'A Repetição Espaçada. Revisar o conteúdo em intervalos de tempo crescentes para interromper o decaimento da memória.' 
+        {
+          id: 102,
+          front: 'O que combate a Curva do Esquecimento de Ebbinghaus?',
+          back: 'A Repetição Espaçada. Revisar o conteúdo em intervalos de tempo crescentes para interromper o decaimento da memória.'
         },
-        { 
-          id: 103, 
-          front: 'Qual o papel do sono na aprendizagem?', 
-          back: 'Durante o sono, especialmente o REM, ocorre a consolidação da memória: a transferência de informações do hipocampo (curto prazo) para o neocórtex (longo prazo).' 
+        {
+          id: 103,
+          front: 'Qual o papel do sono na aprendizagem?',
+          back: 'Durante o sono, especialmente o REM, ocorre a consolidação da memória: a transferência de informações do hipocampo (curto prazo) para o neocórtex (longo prazo).'
         },
         {
           id: 104,
@@ -228,31 +232,31 @@ const AppContent = () => {
       ]
     }
   ]);
-  const [deletedDecks, setDeletedDecks] = useState([]); 
+  const [deletedDecks, setDeletedDecks] = useState([]);
   const [realRankingData, setRealRankingData] = useState([]);
-  
+
   const [savedNotes, setSavedNotes] = useState([
-    { 
-      id: 1, 
-      title: 'Como o Cérebro Aprende', 
+    {
+      id: 1,
+      title: 'Como o Cérebro Aprende',
       date: '18/01/2026 às 09:00',
       main: 'O aprendizado físico ocorre através da alteração na força das conexões sinápticas, processo conhecido como Potenciação de Longa Duração (LTP). Para que a memória se torne permanente, é necessária a síntese de novas proteínas nos neurônios.',
       cues: 'Sinapse, LTP, Neuroplasticidade',
       summary: 'Aprender é biologicamente mudar a estrutura física do cérebro através da repetição e intensidade do estímulo.',
       mode: 'cornell',
       srsStage: 0,
-      nextReviewDate: new Date().toISOString() 
+      nextReviewDate: new Date().toISOString()
     },
-    { 
-      id: 2, 
-      title: 'Mitos do Estudo Passivo', 
+    {
+      id: 2,
+      title: 'Mitos do Estudo Passivo',
       date: '17/01/2026 às 14:30',
       main: 'Métodos populares como reler, grifar e resumir copiando são de baixa utilidade. Eles não exigem esforço cognitivo suficiente para sinalizar ao cérebro que a informação é importante.',
       cues: '',
       summary: '',
       mode: 'blank',
       srsStage: 1,
-      nextReviewDate: new Date(Date.now() + 86400000 * 2).toISOString() 
+      nextReviewDate: new Date(Date.now() + 86400000 * 2).toISOString()
     }
   ]);
 
@@ -264,56 +268,119 @@ const AppContent = () => {
     summary: ''
   });
 
-  // --- Register/Login Handler ---
-  const handleRegister = async (formData) => {
-    if (!formData.name || !user) return;
-    setUsername(formData.name);
-    setUserProfile({
-      email: formData.email,
-      birthDate: formData.birthDate,
-      educationLevel: formData.educationLevel
-    });
-    
-    try {
-      // 1. Save Public Data (Leaderboard)
-      const publicRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', user.uid);
-      await setDoc(publicRef, {
-        name: formData.name,
-        xp: xp,
-        level: level,
-        updatedAt: Date.now(),
-        isMe: true
-      }, { merge: true });
+  // --- Auth Handlers ---
+  const createProfile = async (user, details) => {
+    const name = details.name || user.displayName;
+    const email = details.email || user.email;
 
-      // 2. Save Private Data (Profile)
-      const privateRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'profile');
-      await setDoc(privateRef, {
-        email: formData.email,
-        birthDate: formData.birthDate,
-        educationLevel: formData.educationLevel,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+    if (!name || !user) return;
+
+    try {
+      const profileData = {
+        email: email,
+        birthDate: details.birthDate || null,
+        educationLevel: details.educationLevel || 'nao-informado',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        currentStreak: 1,
+      };
+
+      const publicRef = doc(db, 'leaderboard', user.uid);
+      await setDoc(publicRef, {
+        name: name,
+        xp: 0,
+        level: 0,
+        updatedAt: Date.now(),
+      });
+
+      const privateRef = doc(db, 'users', user.uid);
+      await setDoc(privateRef, profileData);
+
+      // Manually update context after profile creation for social logins
+      // For email/pass, onAuthStateChanged will handle it, but this ensures UI updates instantly.
+      if (user.uid === auth.currentUser?.uid) {
+        setUsername(name);
+        setUserProfile(profileData);
+      }
 
     } catch (e) {
       console.error("Error creating profile", e);
+      setAuthError("Ocorreu um erro ao criar seu perfil.");
     }
   };
 
-  const handleUpdateProfileName = async (newName) => {
-    if (!newName.trim()) return;
-    setUsername(newName); // Context will handle DB update via useEffect
-    
-    if (user) {
-      try {
-        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', user.uid);
-        await setDoc(userRef, { name: newName }, { merge: true });
-      } catch (e) {
-        console.error("Erro ao atualizar nome", e);
+  const handleRegister = async (formData) => {
+    setAuthError(null);
+    setIsSubmitting(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      await createProfile(userCredential.user, formData); // formData works as 'details'
+      // onAuthStateChanged will handle logging the user in.
+    } catch (e) {
+      console.error("Error during registration", e);
+      if (e.code === 'auth/email-already-in-use') {
+        setAuthError("Este e-mail já está em uso. Tente fazer login.");
+      } else if (e.code === 'auth/weak-password') {
+        setAuthError("A senha é muito fraca. Use pelo menos 6 caracteres.");
+      } else {
+        setAuthError("Ocorreu um erro no cadastro. Tente novamente.");
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLogin = async ({ email, password }) => {
+    setAuthError(null);
+    setIsSubmitting(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle the rest.
+    } catch (e) {
+      console.error("Error during login", e);
+      switch (e.code) {
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found': // Legacy code, good to handle
+        case 'auth/wrong-password': // Legacy code, good to handle
+          setAuthError("E-mail ou senha inválidos. Verifique e tente novamente.");
+          break;
+        case 'auth/too-many-requests':
+          setAuthError("Acesso bloqueado temporariamente devido a muitas tentativas. Tente novamente mais tarde.");
+          break;
+        default:
+          setAuthError("Ocorreu um erro inesperado ao tentar fazer login.");
+          break;
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    setIsSubmitting(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if it's a new user by trying to get their profile
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        await createProfile(user, { name: user.displayName, email: user.email });
+      }
+    } catch (error) {
+      console.error("Error during Google sign-in", error);
+      setAuthError("Falha ao entrar com Google. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleLogout = () => {
+    signOut(auth);
     setIsInApp(false);
     setShowProfile(false);
   };
@@ -336,7 +403,7 @@ const AppContent = () => {
   // --- Firebase & Data Effects ---
   useEffect(() => {
     if (!user) return;
-    const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+    const leaderboardRef = collection(db, 'leaderboard');
     const unsubscribe = onSnapshot(leaderboardRef, (snapshot) => {
       const users = [];
       snapshot.forEach((doc) => users.push({ id: doc.id, ...doc.data() }));
@@ -361,7 +428,7 @@ const AppContent = () => {
     if (deck) {
       setDecks(prev => [deck, ...prev]);
       setDeletedDecks(prev => prev.filter(d => d.id !== id));
-      addXp(5); 
+      addXp(5);
     }
   };
 
@@ -373,7 +440,7 @@ const AppContent = () => {
   // --- Handlers (General) ---
   const handleOpenDeckOptions = (deck) => setSelectedDeck(deck);
   const closeDeckOptions = () => setSelectedDeck(null);
-  
+
   const handleStartReview = () => {
     setIsReviewing(true);
   };
@@ -404,9 +471,9 @@ const AppContent = () => {
     if (cards.length === 0) return;
 
     if (editingDeckId) {
-      setDecks(prev => prev.map(d => 
-        d.id === editingDeckId 
-          ? { ...d, title: title || d.title, cards: cards } 
+      setDecks(prev => prev.map(d =>
+        d.id === editingDeckId
+          ? { ...d, title: title || d.title, cards: cards }
           : d
       ));
       addXp(5);
@@ -467,13 +534,13 @@ const AppContent = () => {
 
   const confirmDelete = () => {
     if (!itemToDelete) return;
-    
+
     if (itemToDelete.type === 'note') {
       setDeletedNotes(prev => prev.filter(n => n.id !== itemToDelete.id));
     } else if (itemToDelete.type === 'deck') {
       setDeletedDecks(prev => prev.filter(d => d.id !== itemToDelete.id));
     }
-    
+
     setItemToDelete(null);
     setShowDeleteConfirm(false);
   };
@@ -549,12 +616,12 @@ const AppContent = () => {
     }
   }, [authLoading, user, userProfile.email]);
   if (!isInApp || authLoading) {
-    return <LoginScreen onRegister={handleRegister} initialName={username} isLoading={authLoading} />;
+    return <LoginScreen onRegister={handleRegister} onLogin={handleLogin} onGoogleSignIn={handleGoogleSignIn} initialName={username} isLoading={isSubmitting || authLoading} error={authError} />;
   }
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100">
-      
+
       {/* Sidebar Histórico */}
       <aside className="w-72 border-r border-slate-200 bg-white flex flex-col p-4 overflow-hidden">
         <div className="flex items-center gap-2 px-2 mb-8">
@@ -568,13 +635,13 @@ const AppContent = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-2 mb-3">
             <div className="flex bg-slate-100 p-1 rounded-lg">
-              <button 
+              <button
                 onClick={() => setShowTrash(false)}
                 className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${!showTrash ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
               >
                 <History size={12} /> Notas
               </button>
-              <button 
+              <button
                 onClick={() => setShowTrash(true)}
                 className={`flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${showTrash ? 'bg-white shadow-sm text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
               >
@@ -615,8 +682,8 @@ const AppContent = () => {
                     </div>
                   ) : (
                     deletedNotes.map((note) => (
-                      <div 
-                        key={note.id} 
+                      <div
+                        key={note.id}
                         className="group relative w-full flex flex-col items-start gap-0.5 px-3 py-3 text-sm rounded-xl border border-transparent bg-red-50/30 hover:bg-red-50/60 transition-all cursor-default mb-1"
                       >
                         <div className="font-bold truncate w-32 text-slate-600 line-through decoration-slate-300">
@@ -641,15 +708,15 @@ const AppContent = () => {
                     </div>
                   ) : (
                     deletedDecks.map((deck) => (
-                      <div 
-                        key={deck.id} 
+                      <div
+                        key={deck.id}
                         className="group relative w-full flex flex-col items-start gap-0.5 px-3 py-3 text-sm rounded-xl border border-transparent bg-red-50/30 hover:bg-red-50/60 transition-all cursor-default mb-1"
                       >
                         <div className="font-bold truncate w-32 text-slate-600 line-through decoration-slate-300 flex items-center gap-1.5">
                           <Layers size={10} /> {deck.title || 'Sem título'}
                         </div>
                         <div className="text-[9px] text-slate-400 italic pl-4">{(deck.cards || []).length} cards</div>
-                        
+
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                           <button onClick={() => restoreDeck(deck.id)} className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md" title="Restaurar"><RotateCcw size={14} /></button>
                           <button onClick={() => requestPermanentDeleteDeck(deck.id)} className="p-1.5 text-red-500 hover:bg-red-100 rounded-md" title="Excluir"><XCircle size={14} /></button>
@@ -689,7 +756,7 @@ const AppContent = () => {
               <Flame className="text-orange-500 group-hover:scale-110 transition-transform" fill="currentColor" />
               <span className="font-bold text-slate-700">{streak} dias</span>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button onClick={() => setShowRanking(true)} className="flex items-center justify-center p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 hover:scale-110 transition-all"><Trophy size={18} /></button>
               <div className="flex flex-col gap-0.5">
@@ -712,24 +779,24 @@ const AppContent = () => {
         <div className="flex-1 overflow-y-auto p-12 bg-white">
           <div className="max-w-3xl mx-auto min-h-full">
             <div className="mb-8">
-              <input type="text" value={currentNote.title} onChange={(e) => setCurrentNote({...currentNote, title: e.target.value})} placeholder="Título da Sessão..." className="w-full text-4xl font-extrabold text-slate-800 placeholder:text-slate-200 focus:outline-none" />
+              <input type="text" value={currentNote.title} onChange={(e) => setCurrentNote({ ...currentNote, title: e.target.value })} placeholder="Título da Sessão..." className="w-full text-4xl font-extrabold text-slate-800 placeholder:text-slate-200 focus:outline-none" />
               {lastSaved && <div className="flex items-center gap-1.5 mt-2 text-slate-400 text-xs font-medium animate-in fade-in"><CheckCircle2 size={12} className="text-emerald-500" /><span>{activeNoteId ? 'Atualizado' : 'Salvo'} em {String(lastSaved)}</span></div>}
             </div>
 
             {editorMode === 'blank' ? (
-              <textarea value={currentNote.main} onChange={(e) => setCurrentNote({...currentNote, main: e.target.value})} className="w-full h-[60vh] text-lg leading-relaxed text-slate-700 placeholder:text-slate-300 resize-none focus:outline-none" placeholder="Escreva livremente..." onPaste={handlePaste} />
+              <textarea value={currentNote.main} onChange={(e) => setCurrentNote({ ...currentNote, main: e.target.value })} className="w-full h-[60vh] text-lg leading-relaxed text-slate-700 placeholder:text-slate-300 resize-none focus:outline-none" placeholder="Escreva livremente..." onPaste={handlePaste} />
             ) : (
               <div className="grid grid-cols-4 gap-6 min-h-[70vh]">
                 <div className="col-span-1 border-r border-slate-100 pr-6">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Tópicos</h4>
-                  <textarea value={currentNote.cues} onChange={(e) => setCurrentNote({...currentNote, cues: e.target.value})} className="w-full h-full text-sm font-medium text-indigo-600 placeholder:text-slate-200 resize-none focus:outline-none" placeholder="Keywords..." onPaste={handlePaste} />
+                  <textarea value={currentNote.cues} onChange={(e) => setCurrentNote({ ...currentNote, cues: e.target.value })} className="w-full h-full text-sm font-medium text-indigo-600 placeholder:text-slate-200 resize-none focus:outline-none" placeholder="Keywords..." onPaste={handlePaste} />
                 </div>
                 <div className="col-span-3">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Notas</h4>
-                  <textarea value={currentNote.main} onChange={(e) => setCurrentNote({...currentNote, main: e.target.value})} className="w-full h-[50vh] text-base leading-relaxed text-slate-700 placeholder:text-slate-200 resize-none focus:outline-none" placeholder="Desenvolva os conceitos..." onPaste={handlePaste} />
+                  <textarea value={currentNote.main} onChange={(e) => setCurrentNote({ ...currentNote, main: e.target.value })} className="w-full h-[50vh] text-base leading-relaxed text-slate-700 placeholder:text-slate-200 resize-none focus:outline-none" placeholder="Desenvolva os conceitos..." onPaste={handlePaste} />
                   <div className="mt-8 pt-8 border-t-2 border-dashed border-slate-100">
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Resumo</h4>
-                    <textarea value={currentNote.summary} onChange={(e) => setCurrentNote({...currentNote, summary: e.target.value})} className="w-full h-32 text-sm text-slate-600 italic placeholder:text-slate-200 resize-none focus:outline-none bg-slate-50 p-4 rounded-xl" placeholder="Sintetize aqui..." onPaste={handlePaste} />
+                    <textarea value={currentNote.summary} onChange={(e) => setCurrentNote({ ...currentNote, summary: e.target.value })} className="w-full h-32 text-sm text-slate-600 italic placeholder:text-slate-200 resize-none focus:outline-none bg-slate-50 p-4 rounded-xl" placeholder="Sintetize aqui..." onPaste={handlePaste} />
                   </div>
                 </div>
               </div>
@@ -742,7 +809,7 @@ const AppContent = () => {
 
       {/* Right Sidebar - Tools */}
       <aside className="w-72 border-l border-slate-200 bg-slate-50/50 flex flex-col p-6 space-y-8 overflow-y-auto">
-        
+
         <PomodoroTimer onFinishSession={handlePomodoroFinish} />
 
         <div className="space-y-3">
@@ -755,7 +822,7 @@ const AppContent = () => {
 
         {/* Profile Footer (Bottom Right) */}
         <div className="mt-auto border-t border-slate-200 pt-6">
-          <button 
+          <button
             onClick={() => setShowProfile(true)}
             className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors group text-left"
           >
@@ -774,12 +841,12 @@ const AppContent = () => {
       {/* Demais Modais... */}
       {showLevelUp && (
         <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 fade-in duration-500">
-           <div className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-amber-400">
-             <ArrowUpCircle size={24} className="text-amber-300 animate-bounce" />
-             <div className="text-sm font-bold">
-               <span className="text-amber-300">LEVEL UP!</span> Você alcançou o Nível {level}!
-             </div>
-           </div>
+          <div className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border-2 border-amber-400">
+            <ArrowUpCircle size={24} className="text-amber-300 animate-bounce" />
+            <div className="text-sm font-bold">
+              <span className="text-amber-300">LEVEL UP!</span> Você alcançou o Nível {level}!
+            </div>
+          </div>
         </div>
       )}
 
@@ -793,7 +860,7 @@ const AppContent = () => {
                 <User size={20} className="text-white" />
                 <h3 className="font-bold text-lg">Meu Perfil</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setShowProfile(false)}
                 className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors"
               >
@@ -803,13 +870,13 @@ const AppContent = () => {
 
             {/* Profile Content */}
             <div className="p-6 bg-slate-50 min-h-[250px] flex flex-col gap-6">
-              
+
               {/* User Info & Edit */}
               <div className="flex flex-col items-center">
                 <div className="w-20 h-20 rounded-full bg-indigo-200 text-indigo-600 flex items-center justify-center text-3xl font-bold mb-3 shadow-inner">
                   {username ? username.charAt(0).toUpperCase() : 'U'}
                 </div>
-                
+
                 <h2 className="text-xl font-bold text-slate-800">{username}</h2>
                 <div className="flex flex-col items-center mt-1">
                   <p className="text-xs text-slate-400">Estudante Nível {level}</p>
@@ -852,7 +919,7 @@ const AppContent = () => {
               </div>
 
               {/* Logout Button */}
-              <button 
+              <button
                 onClick={handleLogout}
                 className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors mt-auto border border-transparent hover:border-red-100"
               >
@@ -873,7 +940,7 @@ const AppContent = () => {
         cancelText="Cancelar"
       />
 
-      <FlashcardModal 
+      <FlashcardModal
         isOpen={showFlashcardModal}
         onClose={closeFlashcardModal}
         onSave={handleSaveDeck}
@@ -889,7 +956,7 @@ const AppContent = () => {
         onUpdateName={setUsername}
       />
 
-      <ReviewModal 
+      <ReviewModal
         isOpen={isReviewing}
         deck={selectedDeck}
         onClose={closeReview}

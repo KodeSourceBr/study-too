@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore';
 
 // --- Firebase Configuration & Init ---
 const firebaseConfig = {
-  apiKey: "AIzaSyDqupzdz6xyF48QkoUVLwN6ukv98vehe8c",
-  authDomain: "study2-aab52.firebaseapp.com",
-  projectId: "study2-aab52",
-  storageBucket: "study2-aab52.firebasestorage.app",
-  messagingSenderId: "823672008275",
-  appId: "1:823672008275:web:2619446d48d1c4b13a20a6",
-  measurementId: "G-F7XR0CXTXT"
+  apiKey: "AIzaSyDbICaZQ0T7I6fQm5uj_IK7xe9hrDKwZ3U",
+  authDomain: "studytoo-d2b52.firebaseapp.com",
+  projectId: "studytoo-d2b52",
+  storageBucket: "studytoo-d2b52.firebasestorage.app",
+  messagingSenderId: "719127733941",
+  appId: "1:719127733941:web:5fad30dff96e7a5e3840fc",
+  measurementId: "G-41RXMXS93B"
 };
 
 // Initialize Firebase
