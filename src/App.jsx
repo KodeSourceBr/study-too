@@ -67,7 +67,9 @@ import {
   setDoc,
   getDoc,
   collection,
-  onSnapshot
+  onSnapshot,
+  addDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { auth, db, appId } from './services/firebase';
 
@@ -203,63 +205,11 @@ const AppContent = () => {
   const [deckToEdit, setDeckToEdit] = useState(null);
 
   // Data State
-  const [decks, setDecks] = useState([
-    {
-      id: 'demo-deck-1',
-      title: 'Neurociência da Aprendizagem',
-      createdAt: new Date().toLocaleDateString('pt-BR'),
-      cards: [
-        {
-          id: 101,
-          front: 'O que é Recuperação Ativa (Active Recall)?',
-          back: 'É o esforço consciente de resgatar uma informação da memória sem consultar o material original. É a forma mais eficiente de fortalecer conexões neurais.'
-        },
-        {
-          id: 102,
-          front: 'O que combate a Curva do Esquecimento de Ebbinghaus?',
-          back: 'A Repetição Espaçada. Revisar o conteúdo em intervalos de tempo crescentes para interromper o decaimento da memória.'
-        },
-        {
-          id: 103,
-          front: 'Qual o papel do sono na aprendizagem?',
-          back: 'Durante o sono, especialmente o REM, ocorre a consolidação da memória: a transferência de informações do hipocampo (curto prazo) para o neocórtex (longo prazo).'
-        },
-        {
-          id: 104,
-          front: 'O que é a Ilusão de Competência?',
-          back: 'A sensação falsa de dominar um assunto ao reler passivamente um texto. O cérebro reconhece a informação visualmente, mas não criou caminhos neurais para utilizá-la.'
-        }
-      ]
-    }
-  ]);
+  const [decks, setDecks] = useState([]);
   const [deletedDecks, setDeletedDecks] = useState([]);
   const [realRankingData, setRealRankingData] = useState([]);
 
-  const [savedNotes, setSavedNotes] = useState([
-    {
-      id: 1,
-      title: 'Como o Cérebro Aprende',
-      date: '18/01/2026 às 09:00',
-      main: 'O aprendizado físico ocorre através da alteração na força das conexões sinápticas, processo conhecido como Potenciação de Longa Duração (LTP). Para que a memória se torne permanente, é necessária a síntese de novas proteínas nos neurônios.',
-      cues: 'Sinapse, LTP, Neuroplasticidade',
-      summary: 'Aprender é biologicamente mudar a estrutura física do cérebro através da repetição e intensidade do estímulo.',
-      mode: 'cornell',
-      srsStage: 0,
-      nextReviewDate: new Date().toISOString()
-    },
-    {
-      id: 2,
-      title: 'Mitos do Estudo Passivo',
-      date: '17/01/2026 às 14:30',
-      main: 'Métodos populares como reler, grifar e resumir copiando são de baixa utilidade. Eles não exigem esforço cognitivo suficiente para sinalizar ao cérebro que a informação é importante.',
-      cues: '',
-      summary: '',
-      mode: 'blank',
-      srsStage: 1,
-      nextReviewDate: new Date(Date.now() + 86400000 * 2).toISOString()
-    }
-  ]);
-
+  const [savedNotes, setSavedNotes] = useState([]);
   const [deletedNotes, setDeletedNotes] = useState([]);
   const [currentNote, setCurrentNote] = useState({
     title: '',
@@ -413,6 +363,30 @@ const AppContent = () => {
     return () => unsubscribe();
   }, [user]);
 
+  // Carrega anotações e decks do usuário logado
+  useEffect(() => {
+    if (!user) return;
+
+    // Listener para Anotações
+    const notesRef = collection(db, 'users', user.uid, 'notes');
+    const unsubscribeNotes = onSnapshot(notesRef, (snapshot) => {
+      const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setSavedNotes(notesData);
+    });
+
+    // Listener para Decks
+    const decksRef = collection(db, 'users', user.uid, 'decks');
+    const unsubscribeDecks = onSnapshot(decksRef, (snapshot) => {
+      const decksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDecks(decksData);
+    });
+
+    return () => {
+      unsubscribeNotes();
+      unsubscribeDecks();
+    };
+  }, [user]);
+
   // --- Deck Deletion Handlers ---
   const moveDeckToTrash = (id) => {
     const deck = decks.find(d => d.id === id);
@@ -467,28 +441,33 @@ const AppContent = () => {
     setTimeout(() => setDeckToEdit(null), 300);
   };
 
-  const handleSaveDeck = ({ editingDeckId, title, cards }) => {
-    if (cards.length === 0) return;
+  const handleSaveDeck = async ({ editingDeckId, title, cards }) => {
+    if (cards.length === 0 || !user) return;
 
-    if (editingDeckId) {
-      setDecks(prev => prev.map(d =>
-        d.id === editingDeckId
-          ? { ...d, title: title || d.title, cards: cards }
-          : d
-      ));
-      addXp(5);
-    } else {
-      const newDeck = {
-        id: Date.now(),
-        title: title || `Deck Sem Título ${decks.length + 1}`,
-        cards: cards,
-        createdAt: new Date().toLocaleDateString('pt-BR')
-      };
-      setDecks(prev => [newDeck, ...prev]);
-      addXp((cards.length * 10) + 20);
-      incrementStreak();
+    try {
+      if (editingDeckId) {
+        const deckRef = doc(db, 'users', user.uid, 'decks', editingDeckId);
+        await updateDoc(deckRef, {
+          title: title || 'Deck Sem Título',
+          cards: cards,
+          updatedAt: new Date().toISOString()
+        });
+        addXp(5);
+      } else {
+        const decksCollectionRef = collection(db, 'users', user.uid, 'decks');
+        await addDoc(decksCollectionRef, {
+          title: title || `Deck Sem Título ${decks.length + 1}`,
+          cards: cards,
+          createdAt: new Date().toISOString()
+        });
+        addXp((cards.length * 10) + 20);
+        incrementStreak();
+      }
+      closeFlashcardModal();
+    } catch (error) {
+      console.error("Erro ao salvar o deck:", error);
+      setAuthError("Não foi possível salvar o deck. Verifique sua conexão.");
     }
-    closeFlashcardModal();
   };
 
   const resetEditor = () => {
@@ -564,29 +543,40 @@ const AppContent = () => {
     }));
   };
 
-  const handleSave = () => {
-    if (!currentNote.title.trim()) return;
+  const handleSave = async () => {
+    if (!currentNote.title.trim() || !user) return;
     setIsSaving(true);
-    setTimeout(() => {
+
+    try {
       const now = new Date();
       const timestamp = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
 
+      const noteData = {
+        ...currentNote,
+        date: timestamp,
+        mode: editorMode,
+        updatedAt: now.toISOString()
+      };
+
       if (activeNoteId) {
-        setSavedNotes(prev => prev.map(note => note.id === activeNoteId ? { ...note, ...currentNote, date: timestamp, mode: editorMode } : note));
+        const noteRef = doc(db, 'users', user.uid, 'notes', activeNoteId);
+        await updateDoc(noteRef, noteData);
         addXp(5);
       } else {
-        const newId = Date.now();
-        const newSavedNote = { ...currentNote, id: newId, date: timestamp, mode: editorMode, srsStage: 0, nextReviewDate: tomorrow.toISOString() };
-        setSavedNotes(prev => [newSavedNote, ...prev]);
-        setActiveNoteId(newId);
+        const notesCollectionRef = collection(db, 'users', user.uid, 'notes');
+        const newNoteRef = await addDoc(notesCollectionRef, { ...noteData, srsStage: 0, nextReviewDate: tomorrow.toISOString(), createdAt: now.toISOString() });
+        setActiveNoteId(newNoteRef.id);
         addXp(15);
         incrementStreak();
       }
       setLastSaved(timestamp);
+    } catch (error) {
+      console.error("Erro ao salvar anotação:", error);
+    } finally {
       setIsSaving(false);
-    }, 600);
+    }
   };
 
   const handlePaste = (e) => {
