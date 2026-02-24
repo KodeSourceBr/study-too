@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, appId } from '../services/firebase';
 
 const UserContext = createContext();
@@ -111,9 +111,27 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const updateUserProfileData = async (profileUpdate) => {
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    const { name, ...otherProfileData } = profileUpdate;
+
+    // 1. Atualiza o documento privado em 'users'
+    if (Object.keys(otherProfileData).length > 0) {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, otherProfileData);
+      setUserProfile(prev => ({ ...prev, ...otherProfileData }));
+    }
+
+    // 2. Atualiza o nome no estado (que vai sincronizar com o leaderboard)
+    if (name && name !== username) {
+      setUsername(name);
+    }
+  };
+
   const value = {
     user, authLoading, username, userProfile, xp, level, streak, showLevelUp,
-    addXp, incrementStreak, setUsername, setUserProfile
+    addXp, incrementStreak, setUsername, setUserProfile, updateUserProfileData
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

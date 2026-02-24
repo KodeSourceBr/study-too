@@ -171,7 +171,7 @@ const AppContent = () => {
   // --- State Management ---
   const {
     user, authLoading, username, userProfile, xp, level, streak, showLevelUp,
-    addXp, incrementStreak, setUsername, setUserProfile
+    addXp, incrementStreak, setUsername, setUserProfile, updateUserProfileData
   } = useUser();
 
   const [isInApp, setIsInApp] = useState(false); // Controls Login Screen vs App
@@ -188,6 +188,9 @@ const AppContent = () => {
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState(null); // Vai guardar { name, educationLevel, birthDate }
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Session State
   const [sessionSeconds, setSessionSeconds] = useState(0);
@@ -529,6 +532,45 @@ const AppContent = () => {
     setShowDeleteConfirm(false);
   };
 
+  const handleEditProfile = () => {
+    setProfileData({
+      name: username,
+      educationLevel: userProfile.educationLevel || 'nao-informado',
+      birthDate: userProfile.birthDate || '',
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleCancelEditProfile = () => {
+    setIsEditingProfile(false);
+    setProfileData(null);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profileData) return;
+    setIsSavingProfile(true);
+    try {
+      await updateUserProfileData(profileData);
+      setIsEditingProfile(false);
+      setProfileData(null);
+    } catch (error) {
+      console.error("Falha ao salvar o perfil:", error);
+      setAuthError("Não foi possível salvar as alterações. Tente novamente.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleProfileFormChange = (e) => {
+    const { name, value } = e.target;
+    setProfileData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCloseProfileModal = () => {
+    if (isEditingProfile) handleCancelEditProfile();
+    setShowProfile(false);
+  };
+
   const handleCompleteReview = (noteId, e) => {
     e.stopPropagation();
     setSavedNotes(prev => prev.map(note => {
@@ -844,37 +886,66 @@ const AppContent = () => {
       {showProfile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-indigo-900/30 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm relative animate-in zoom-in-95 duration-200 overflow-hidden">
-            {/* Header */}
+            {/* Cabeçalho do Modal */}
             <div className="px-6 py-4 bg-indigo-600 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <User size={20} className="text-white" />
-                <h3 className="font-bold text-lg">Meu Perfil</h3>
+                <h3 className="font-bold text-lg">{isEditingProfile ? 'Editar Perfil' : 'Meu Perfil'}</h3>
               </div>
-              <button
-                onClick={() => setShowProfile(false)}
-                className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors"
-              >
-                <XCircle size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                {isEditingProfile ? (
+                  <>
+                    <button onClick={handleCancelEditProfile} className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors" title="Cancelar Edição">
+                      <XCircle size={20} />
+                    </button>
+                    <button onClick={handleSaveProfile} disabled={isSavingProfile} className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Salvar Alterações">
+                      {isSavingProfile ? <RotateCcw size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={handleEditProfile} className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors" title="Editar Perfil">
+                      <Edit3 size={20} />
+                    </button>
+                    <button onClick={handleCloseProfileModal} className="p-1.5 hover:bg-indigo-500 rounded-full text-indigo-100 transition-colors" title="Fechar">
+                      <XCircle size={20} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Profile Content */}
+            {/* Conteúdo do Perfil */}
             <div className="p-6 bg-slate-50 min-h-[250px] flex flex-col gap-6">
 
-              {/* User Info & Edit */}
+              {/* Informações do Usuário */}
               <div className="flex flex-col items-center">
                 <div className="w-20 h-20 rounded-full bg-indigo-200 text-indigo-600 flex items-center justify-center text-3xl font-bold mb-3 shadow-inner">
-                  {username ? username.charAt(0).toUpperCase() : 'U'}
+                  {isEditingProfile
+                    ? (profileData?.name ? profileData.name.charAt(0).toUpperCase() : 'U')
+                    : (username ? username.charAt(0).toUpperCase() : 'U')
+                  }
                 </div>
 
-                <h2 className="text-xl font-bold text-slate-800">{username}</h2>
+                {isEditingProfile ? (
+                  <input
+                    name="name"
+                    value={profileData?.name || ''}
+                    onChange={handleProfileFormChange}
+                    className="text-xl font-bold text-slate-800 text-center bg-slate-100 rounded-md px-2 py-1 border border-slate-200 focus:ring-2 focus:ring-indigo-300 focus:outline-none"
+                    placeholder="Seu nome"
+                  />
+                ) : (
+                  <h2 className="text-xl font-bold text-slate-800">{username}</h2>
+                )}
+
                 <div className="flex flex-col items-center mt-1">
                   <p className="text-xs text-slate-400">Estudante Nível {level}</p>
                   <div className="text-[10px] text-slate-300 mt-0.5">{userProfile.email}</div>
                 </div>
               </div>
 
-              {/* Stats Grid */}
+              {/* Grid de Estatísticas */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col items-center">
                   <div className="text-xs font-bold text-slate-400 uppercase mb-1">XP Total</div>
@@ -896,25 +967,43 @@ const AppContent = () => {
                 </div>
               </div>
 
-              {/* Extra Info */}
-              <div className="bg-white p-4 rounded-xl border border-slate-100 text-xs text-slate-500 space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-bold">Escolaridade:</span>
-                  <span className="capitalize">{userProfile.educationLevel.replace('-', ' ')}</span>
+              {/* Informações Adicionais / Formulário de Edição */}
+              {isEditingProfile ? (
+                <div className="bg-white p-4 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-3">
+                  <div className="flex flex-col">
+                    <label className="font-bold mb-1 text-slate-500">Escolaridade:</label>
+                    <select name="educationLevel" value={profileData?.educationLevel || 'nao-informado'} onChange={handleProfileFormChange} className="w-full p-2 text-xs border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-indigo-300 focus:outline-none">
+                      <option value="nao-informado">Não informar</option>
+                      <option value="fundamental">Ensino Fundamental</option>
+                      <option value="medio">Ensino Médio</option>
+                      <option value="superior">Ensino Superior</option>
+                      <option value="pos-graduacao">Pós-graduação</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="font-bold mb-1 text-slate-500">Nascimento:</label>
+                    <input type="date" name="birthDate" value={profileData?.birthDate || ''} onChange={handleProfileFormChange} className="w-full p-2 text-xs border border-slate-200 rounded-md bg-white focus:ring-2 focus:ring-indigo-300 focus:outline-none" />
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="font-bold">Nascimento:</span>
-                  <span>{userProfile.birthDate ? userProfile.birthDate.split('-').reverse().join('/') : '-'}</span>
+              ) : (
+                <div className="bg-white p-4 rounded-xl border border-slate-100 text-xs text-slate-500 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-bold">Escolaridade:</span>
+                    <span className="capitalize">{userProfile.educationLevel.replace('-', ' ')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Nascimento:</span>
+                    <span>{userProfile.birthDate ? userProfile.birthDate.split('-').reverse().join('/') : '-'}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors mt-auto border border-transparent hover:border-red-100"
-              >
-                <LogOut size={16} /> Sair da Conta
-              </button>
+              {/* Botão de Logout (visível apenas quando não está editando) */}
+              {!isEditingProfile && (
+                <button onClick={handleLogout} className="w-full py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors mt-auto border border-transparent hover:border-red-100">
+                  <LogOut size={16} /> Sair da Conta
+                </button>
+              )}
             </div>
           </div>
         </div>
