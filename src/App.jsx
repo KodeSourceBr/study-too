@@ -69,9 +69,14 @@ import {
   collection,
   onSnapshot,
   addDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
-import { auth, db, appId } from './services/firebase';
+import {
+  auth,
+  db,
+  appId
+} from './services/firebase';
 
 // --- SRS Constants ---
 const SRS_INTERVALS = [1, 3, 7, 15, 30]; // Dias para próximas revisões
@@ -171,7 +176,7 @@ const AppContent = () => {
   // --- State Management ---
   const {
     user, authLoading, username, userProfile, xp, level, streak, showLevelUp,
-    addXp, incrementStreak, setUsername, setUserProfile, updateUserProfileData
+    addXp, setUsername, setUserProfile, updateUserProfileData
   } = useUser();
 
   const [isInApp, setIsInApp] = useState(false); // Controls Login Screen vs App
@@ -370,14 +375,14 @@ const AppContent = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Listener para Anotações
+    // Listener para Anotações (CAMINHO CORRIGIDO)
     const notesRef = collection(db, 'users', user.uid, 'notes');
     const unsubscribeNotes = onSnapshot(notesRef, (snapshot) => {
       const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSavedNotes(notesData);
     });
 
-    // Listener para Decks
+    // Listener para Decks (CAMINHO CORRIGIDO)
     const decksRef = collection(db, 'users', user.uid, 'decks');
     const unsubscribeDecks = onSnapshot(decksRef, (snapshot) => {
       const decksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -457,14 +462,13 @@ const AppContent = () => {
         });
         addXp(5);
       } else {
-        const decksCollectionRef = collection(db, 'users', user.uid, 'decks');
-        await addDoc(decksCollectionRef, {
-          title: title || `Deck Sem Título ${decks.length + 1}`,
+        const decksCollection = collection(db, 'users', user.uid, 'decks');
+        await addDoc(decksCollection, {
+          title: title || `Deck Novo ${decks.length + 1}`,
           cards: cards,
           createdAt: new Date().toISOString()
         });
-        addXp((cards.length * 10) + 20);
-        incrementStreak();
+        addXp((cards.length * 10) + 20); // TODO: Check if this is correct
       }
       closeFlashcardModal();
     } catch (error) {
@@ -514,13 +518,21 @@ const AppContent = () => {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = () => {
-    if (!itemToDelete) return;
+  const confirmDelete = async () => {
+    if (!itemToDelete || !user) return;
 
-    if (itemToDelete.type === 'note') {
-      setDeletedNotes(prev => prev.filter(n => n.id !== itemToDelete.id));
-    } else if (itemToDelete.type === 'deck') {
-      setDeletedDecks(prev => prev.filter(d => d.id !== itemToDelete.id));
+    try {
+      if (itemToDelete.type === 'note') {
+        // Exclui de verdade no banco
+        await deleteDoc(doc(db, 'users', user.uid, 'notes', itemToDelete.id));
+        setDeletedNotes(prev => prev.filter(n => n.id !== itemToDelete.id));
+      } else if (itemToDelete.type === 'deck') {
+        // Exclui de verdade no banco
+        await deleteDoc(doc(db, 'users', user.uid, 'decks', itemToDelete.id));
+        setDeletedDecks(prev => prev.filter(d => d.id !== itemToDelete.id));
+      }
+    } catch (error) {
+      console.error("Erro ao excluir do banco:", error);
     }
 
     setItemToDelete(null);
@@ -571,18 +583,30 @@ const AppContent = () => {
     setShowProfile(false);
   };
 
-  const handleCompleteReview = (noteId, e) => {
+  const handleCompleteReview = async (noteId, e) => {
     e.stopPropagation();
-    setSavedNotes(prev => prev.map(note => {
-      if (note.id !== noteId) return note;
-      const currentStage = note.srsStage || 0;
-      const nextStage = Math.min(currentStage + 1, SRS_INTERVALS.length - 1);
-      const daysToAdd = SRS_INTERVALS[currentStage];
-      const nextDate = new Date();
-      nextDate.setDate(nextDate.getDate() + daysToAdd);
+
+    // Acha a nota atual para fazer o cálculo
+    const note = savedNotes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const currentStage = note.srsStage || 0;
+    const nextStage = Math.min(currentStage + 1, SRS_INTERVALS.length - 1);
+    const daysToAdd = SRS_INTERVALS[currentStage];
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + daysToAdd);
+
+    try {
+      // Atualiza direto no Firebase (o onSnapshot atualiza a tela automaticamente)
+      const noteRef = doc(db, 'users', user.uid, 'notes', noteId);
+      await updateDoc(noteRef, {
+        srsStage: nextStage,
+        nextReviewDate: nextDate.toISOString()
+      });
       addXp(25);
-      return { ...note, srsStage: nextStage, nextReviewDate: nextDate.toISOString() };
-    }));
+    } catch (error) {
+      console.error("Erro ao atualizar SRS no banco:", error);
+    }
   };
 
   const handleSave = async () => {
@@ -607,11 +631,13 @@ const AppContent = () => {
         await updateDoc(noteRef, noteData);
         addXp(5);
       } else {
-        const notesCollectionRef = collection(db, 'users', user.uid, 'notes');
-        const newNoteRef = await addDoc(notesCollectionRef, { ...noteData, srsStage: 0, nextReviewDate: tomorrow.toISOString(), createdAt: now.toISOString() });
-        setActiveNoteId(newNoteRef.id);
+        const notesCollection = collection(db, 'users', user.uid, 'notes');
+        await addDoc(notesCollection, {
+          ...noteData,
+          srsStage: 0,
+          nextReviewDate: new Date(Date.now() + 86400000).toISOString()
+        });
         addXp(15);
-        incrementStreak();
       }
       setLastSaved(timestamp);
     } catch (error) {

@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, appId } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 
 const UserContext = createContext();
 
@@ -40,25 +40,45 @@ export const UserProvider = ({ children }) => {
 
             // Lógica de Streak (Ofensiva)
             let currentStreak = userData.currentStreak || 0;
+            let needsDbUpdate = false;
+
+            // Pega a data de hoje e zera as horas para comparar apenas os dias
             const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
             if (userData.lastLogin) {
-              const lastLoginDate = new Date(userData.lastLogin);
-              lastLoginDate.setHours(0, 0, 0, 0);
-              const diffDays = Math.ceil(Math.abs(today - lastLoginDate) / (1000 * 60 * 60 * 24));
+              const lastLogin = new Date(userData.lastLogin);
+              const lastLoginNormalized = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
 
-              if (diffDays > 1) {
-                currentStreak = 0; // Ofensiva quebrada
+              // Calcula a diferença exata de dias
+              const diffTime = todayNormalized.getTime() - lastLoginNormalized.getTime();
+              const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+              if (diffDays === 1) {
+                // Entrou no dia seguinte: Aumenta a ofensiva
+                currentStreak += 1;
+                needsDbUpdate = true;
+              } else if (diffDays > 1) {
+                // Pulou um ou mais dias: Perdeu a ofensiva, recomeça do 1
+                currentStreak = 1;
+                needsDbUpdate = true;
               }
+              // Se diffDays === 0, ele já acessou hoje, então o currentStreak se mantém
+            } else {
+              // Não tinha data de último login salva
+              currentStreak = 1;
+              needsDbUpdate = true;
             }
 
             setStreak(currentStreak);
-            // Atualiza o último login no mesmo documento
-            await setDoc(userRef, {
-              lastLogin: new Date().toISOString(),
-              currentStreak
-            }, { merge: true });
+
+            // Atualiza o DB apenas se for o primeiro login de um novo dia.
+            if (needsDbUpdate) {
+              await updateDoc(userRef, {
+                lastLogin: today.toISOString(),
+                currentStreak: currentStreak
+              });
+            }
           }
 
         } catch (e) {
@@ -77,7 +97,7 @@ export const UserProvider = ({ children }) => {
     });
     return () => unsubscribe();
   }, []);
-  
+
   useEffect(() => {
     const calculatedLevel = Math.floor(xp / 100);
     if (calculatedLevel > level) {
@@ -101,16 +121,6 @@ export const UserProvider = ({ children }) => {
 
   const addXp = (amount) => setXp(prev => prev + amount);
 
-  const incrementStreak = async () => {
-    const newStreak = streak + 1;
-    setStreak(newStreak);
-    if (user) {
-      // Alterar para (salvando direto no perfil do usuário):
-      const statsRef = doc(db, 'users', user.uid);
-      await setDoc(statsRef, { currentStreak: newStreak, lastLogin: new Date().toISOString() }, { merge: true });
-    }
-  };
-
   const updateUserProfileData = async (profileUpdate) => {
     if (!user) throw new Error("Usuário não autenticado.");
 
@@ -131,7 +141,7 @@ export const UserProvider = ({ children }) => {
 
   const value = {
     user, authLoading, username, userProfile, xp, level, streak, showLevelUp,
-    addXp, incrementStreak, setUsername, setUserProfile, updateUserProfileData
+    addXp, setUsername, setUserProfile, updateUserProfileData
   };
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
