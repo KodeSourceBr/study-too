@@ -225,6 +225,7 @@ const AppContent = () => {
     cues: '',
     summary: ''
   });
+  const [originalNoteContent, setOriginalNoteContent] = useState(null); // Para rastrear alterações para XP
 
   // --- Auth Handlers ---
   const createProfile = async (user, details) => {
@@ -480,6 +481,7 @@ const AppContent = () => {
   const resetEditor = () => {
     setActiveNoteId(null);
     setCurrentNote({ title: '', main: '', cues: '', summary: '' });
+    setOriginalNoteContent(null);
     setLastSaved("");
     setShowTrash(false);
   };
@@ -487,8 +489,10 @@ const AppContent = () => {
   const loadNote = (note) => {
     if (!note) return;
     setActiveNoteId(note.id);
+    const content = { title: note.title || '', main: note.main || '', cues: note.cues || '', summary: note.summary || '' };
     setEditorMode(note.mode || 'blank');
-    setCurrentNote({ title: note.title || '', main: note.main || '', cues: note.cues || '', summary: note.summary || '' });
+    setCurrentNote(content);
+    setOriginalNoteContent(content);
     setLastSaved(note.date || "");
   };
 
@@ -616,8 +620,6 @@ const AppContent = () => {
     try {
       const now = new Date();
       const timestamp = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
 
       const noteData = {
         ...currentNote,
@@ -627,17 +629,27 @@ const AppContent = () => {
       };
 
       if (activeNoteId) {
+        // Compara o conteúdo atual com o original carregado
+        const hasChanged = JSON.stringify(currentNote) !== JSON.stringify(originalNoteContent);
+
         const noteRef = doc(db, 'users', user.uid, 'notes', activeNoteId);
         await updateDoc(noteRef, noteData);
-        addXp(5);
+
+        if (hasChanged) {
+          addXp(5);
+        }
+        // Após salvar, o novo "original" é o conteúdo que acabamos de salvar
+        setOriginalNoteContent(currentNote);
       } else {
         const notesCollection = collection(db, 'users', user.uid, 'notes');
-        await addDoc(notesCollection, {
+        const newDocRef = await addDoc(notesCollection, {
           ...noteData,
           srsStage: 0,
           nextReviewDate: new Date(Date.now() + 86400000).toISOString()
         });
         addXp(15);
+        setActiveNoteId(newDocRef.id);
+        setOriginalNoteContent(currentNote);
       }
       setLastSaved(timestamp);
     } catch (error) {
